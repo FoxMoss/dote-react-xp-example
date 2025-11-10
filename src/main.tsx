@@ -6,6 +6,31 @@ import {
 } from "dreamland/core";
 
 type WindowDataSegment = { t: string };
+
+type WindowFocusReply = {
+  t: "window_focus";
+  window: string;
+};
+
+type WindowFocusRequest = {
+  t: "window_focus";
+  window: string;
+};
+
+type WindowReorderRequest = {
+  t: "window_reorder";
+  windows: string[];
+};
+
+type WindowRegisterBorderRequest = {
+  t: "window_register_border";
+  window: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 type WindowMapReply = {
   t: "window_map";
   window: string;
@@ -14,6 +39,12 @@ type WindowMapReply = {
   y: number;
   width: number;
   height: number;
+};
+
+type MouseMoveReply = {
+  t: "mouse_move";
+  x: number;
+  y: number;
 };
 
 type WindowMapRequest = {
@@ -34,6 +65,7 @@ type WindowData = {
   height: number;
 };
 
+const BORDER_WIDTH = 20;
 let WindowFrame: Component<
   {
     visible: boolean;
@@ -43,23 +75,29 @@ let WindowFrame: Component<
     height: number;
     window: string;
   },
-  {}
+  {
+    mousedown: boolean;
+  }
 > = function (ctx) {
   ctx.mount = () => {
-    let mousedown = false;
     let offsetX = 0;
     let offsetY = 0;
 
     ctx.root.addEventListener("mousedown", (e) => {
-      mousedown = true;
+      this.mousedown = true;
       offsetX = this.x - e.clientX;
       offsetY = this.y - e.clientY;
+
+      message_queue.push({
+        t: "window_focus",
+        window: this.window,
+      } as WindowFocusRequest);
     });
     document.addEventListener("mouseup", () => {
-      mousedown = false;
+      this.mousedown = false;
     });
     document.addEventListener("mousemove", (e) => {
-      if (mousedown) {
+      if (this.mousedown) {
         message_queue.push({
           t: "window_map",
           x: e.clientX + offsetX,
@@ -69,51 +107,91 @@ let WindowFrame: Component<
           height: state.windows[this.window].height,
         } as WindowMapRequest);
       }
-    
     });
   };
   return (
     <div
       style={{
         position: "absolute",
-        left: use(this.x).map((x) => x - 10 + "px"),
-        top: use(this.y).map((y) => y - 10 + "px"),
-        width: use(this.width).map((w) => w + 20 + "px"),
-        height: use(this.height).map((h) => h + 20 + "px"),
-        background: "black",
+        left: use(this.x).map((x) => x - BORDER_WIDTH + "px"),
+        top: use(this.y).map((y) => y - BORDER_WIDTH + "px"),
+        width: use(this.width).map((w) => w + BORDER_WIDTH * 2 + "px"),
+        height: use(this.height).map((h) => h + BORDER_WIDTH * 2 + "px"),
         display: use(this.visible).map((v) => (v ? "block" : "none")),
         cursor: "pointer",
       }}
     >
+      <div
+        class={use(this.mousedown).map((m) =>
+          m ? "title-bar title-bar-active" : "title-bar",
+        )}
+      >
+        <div class="title-bar-text">{this.window}</div>
+        <div class="title-bar-controls">
+          <button aria-label="Minimize"></button>
+          <button aria-label="Maximize"></button>
+          <button aria-label="Close"></button>
+        </div>
+      </div>
     </div>
   );
 };
 
 let state: Stateful<{
   windows: Record<string, WindowData>;
+  window_order: string[];
   window_frames: Record<string, HTMLElement>;
+  elapsed: DOMHighResTimeStamp;
 }> = createState({
   windows: {},
+  window_order: [],
   window_frames: {},
+  elapsed: 0,
 });
 let message_queue: WindowDataSegment[] = [];
+
+use(state.window_order).listen((val) => {
+  message_queue.push({
+    t: "window_reorder",
+    windows: val,
+  } as WindowReorderRequest);
+});
 
 let start: DOMHighResTimeStamp;
 function step(timestamp: DOMHighResTimeStamp) {
   if (start === undefined) {
     start = timestamp;
   }
-  const elapsed = timestamp - start;
+  state.elapsed = timestamp - start;
 
   window.cefQuery({
     request: JSON.stringify(message_queue),
     onSuccess: (response: string) => {
       message_queue = [];
-      if (response != "[]") console.log(response, elapsed);
+      if (response != "[]") console.log(response, state.elapsed);
 
       const response_parsed = JSON.parse(response) as WindowDataSegment[];
       for (let segment in response_parsed) {
-        if (response_parsed[segment]["t"] == "window_map") {
+        if (response_parsed[segment]["t"] == "window_focus") {
+          let window_focus_reply = response_parsed[segment] as WindowFocusReply;
+
+          state.window_order.splice(
+            state.window_order.indexOf(window_focus_reply.window),
+            1,
+          );
+          state.window_order.push(window_focus_reply.window);
+          state.window_order = state.window_order;
+        }
+
+        if (response_parsed[segment]["t"] == "mouse_move") {
+          let mouse_move_reply = response_parsed[segment] as MouseMoveReply;
+          let event = new MouseEvent("mousemove", {
+            clientX: mouse_move_reply.x,
+            clientY: mouse_move_reply.y,
+            view: window,
+          });
+          document.dispatchEvent(event);
+        } else if (response_parsed[segment]["t"] == "window_map") {
           let window_map_reply = response_parsed[segment] as WindowMapReply;
 
           if (
@@ -140,6 +218,12 @@ function step(timestamp: DOMHighResTimeStamp) {
             width: window_map_reply.width,
             height: window_map_reply.height,
           };
+          state.windows = state.windows;
+
+          if (!state.window_order.includes(window_map_reply.window)) {
+            state.window_order.push(window_map_reply.window);
+            state.window_order = state.window_order;
+          }
 
           if (!state.window_frames[window_map_reply.window]) {
             state.window_frames[window_map_reply.window] = (
@@ -162,9 +246,17 @@ function step(timestamp: DOMHighResTimeStamp) {
                 window={window_map_reply.window}
               />
             );
+
+            message_queue.push({
+              t: "window_register_border",
+              window: window_map_reply.window,
+              x: -BORDER_WIDTH,
+              y: -BORDER_WIDTH,
+              width: BORDER_WIDTH,
+              height: BORDER_WIDTH,
+            } as WindowRegisterBorderRequest);
           }
 
-          state.windows = state.windows;
           state.window_frames = state.window_frames;
         }
       }
@@ -177,21 +269,31 @@ function step(timestamp: DOMHighResTimeStamp) {
 
 requestAnimationFrame(step);
 
-let App: Component<{}, { counter: number; x: number; y: number }> =
-  function () {
-    this.counter = 0;
-    this.x = 0;
-    this.y = 0;
+let App: Component<{}, { counter: number; x: number; y: number }> = function (
+  ctx,
+) {
+  this.counter = 0;
+  this.x = 0;
+  this.y = 0;
 
-    return (
-      <div>
-        {use(state.windows).map((wins) => JSON.stringify(wins))}
-        {use(state.window_frames).map((wins) => {
-          return Object.values(wins);
-        })}
-      </div>
-    );
+  ctx.mount = () => {
+    document.addEventListener("mousemove", (e) => {
+      this.x = e.screenX;
+      this.y = e.screenY;
+    });
   };
+
+  return (
+    <div>
+      {use(this.x)},{use(this.y)}
+      {use(state.windows).map((wins) => JSON.stringify(wins))}
+      {use(state.window_order).map((wins) => JSON.stringify(wins))}
+      {use(state.window_frames).map((wins) => {
+        return Object.values(wins);
+      })}
+    </div>
+  );
+};
 App.style = css`
   :scope {
     border: 4px dashed cornflowerblue;
@@ -200,4 +302,6 @@ App.style = css`
 `;
 
 document.querySelector("#app")?.replaceWith(<App />);
-document.addEventListener("contextmenu", () => {return false});
+document.addEventListener("contextmenu", () => {
+  return false;
+});
