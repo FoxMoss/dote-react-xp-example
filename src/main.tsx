@@ -113,10 +113,10 @@ let WindowFrame: Component<
     <div
       style={{
         position: "absolute",
-        left: use(this.x).map((x) => x - BORDER_WIDTH + "px"),
+        left: use(this.x).map((x) => x + "px"),
         top: use(this.y).map((y) => y - BORDER_WIDTH + "px"),
-        width: use(this.width).map((w) => w + BORDER_WIDTH * 2 + "px"),
-        height: use(this.height).map((h) => h + BORDER_WIDTH * 2 + "px"),
+        width: use(this.width).map((w) => w + "px"),
+        height: use(this.height).map((h) => h + BORDER_WIDTH + "px"),
         display: use(this.visible).map((v) => (v ? "block" : "none")),
         cursor: "pointer",
       }}
@@ -250,10 +250,10 @@ function step(timestamp: DOMHighResTimeStamp) {
             message_queue.push({
               t: "window_register_border",
               window: window_map_reply.window,
-              x: -BORDER_WIDTH,
+              x: 0,
               y: -BORDER_WIDTH,
-              width: BORDER_WIDTH,
-              height: BORDER_WIDTH,
+              width: 0,
+              height: 0,
             } as WindowRegisterBorderRequest);
           }
 
