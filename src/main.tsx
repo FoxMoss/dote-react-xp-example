@@ -60,6 +60,11 @@ type WindowMapRequest = {
   height: number;
 };
 
+type RunProgramRequest = {
+  t: "run_program";
+  command: string;
+};
+
 type WindowData = {
   window: string;
   visible: boolean;
@@ -114,7 +119,6 @@ let WindowFrame: Component<
         state.window_buffer[this.window].x = e.clientX + offsetX;
         state.window_buffer[this.window].y = e.clientY + offsetY;
         state.window_buffer = state.window_buffer;
-
       }
     });
   };
@@ -128,7 +132,9 @@ let WindowFrame: Component<
         height: use(this.height).map((h) => h + BORDER_WIDTH + "px"),
         display: use(this.visible).map((v) => (v ? "block" : "none")),
         cursor: "pointer",
-        "z-index": use(state.window_order).map((order) => (order.indexOf(this.window) + 1).toString()) 
+        "z-index": use(state.window_order).map((order) =>
+          (order.indexOf(this.window) + 1).toString(),
+        ),
       }}
     >
       <div
@@ -176,11 +182,10 @@ function step(timestamp: DOMHighResTimeStamp) {
   }
   state.elapsed = timestamp - start;
 
-  message_queue.push({t: "render_request"});
-
   window.cefQuery({
     request: JSON.stringify(message_queue),
     onSuccess: (response: string) => {
+      state.windows = state.window_buffer;
       message_queue = [];
       if (response != "[]") console.log(response, state.elapsed);
 
@@ -196,11 +201,8 @@ function step(timestamp: DOMHighResTimeStamp) {
           state.window_order.push(window_focus_reply.window);
           state.window_order = state.window_order;
         }
-        if (response_parsed[segment]["t"] == "render_reply") {
-          state.windows = state.window_buffer;
-        }
 
-        else if (response_parsed[segment]["t"] == "mouse_move") {
+        if (response_parsed[segment]["t"] == "mouse_move") {
           let mouse_move_reply = response_parsed[segment] as MouseMoveReply;
           let event = new MouseEvent("mousemove", {
             clientX: mouse_move_reply.x,
@@ -236,7 +238,6 @@ function step(timestamp: DOMHighResTimeStamp) {
               width: window_map_reply.width,
               height: window_map_reply.height,
             };
-            state.windows = state.window_buffer;
           } else if (state.window_buffer[window_map_reply.window]) {
             state.window_buffer[window_map_reply.window] = {
               window: window_map_reply.window,
@@ -321,6 +322,16 @@ let App: Component<{}, { counter: number; x: number; y: number }> = function (
       {use(state.window_frames).map((wins) => {
         return Object.values(wins);
       })}
+      <button
+        on:click={() => {
+          message_queue.push({
+            t: "run_program",
+            command: "/usr/bin/kitty",
+          } as RunProgramRequest);
+        }}
+      >
+        Open kitty!
+      </button>
     </div>
   );
 };
