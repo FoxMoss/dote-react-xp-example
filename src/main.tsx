@@ -12,6 +12,16 @@ type WindowFocusReply = {
   window: string;
 };
 
+type WindowCloseReply = {
+  t: "window_close";
+  window: string;
+};
+
+type WindowCloseRequest = {
+  t: "window_close";
+  window: string;
+};
+
 type RenderReply = {
   t: "render_reply";
 };
@@ -86,14 +96,14 @@ let WindowFrame: Component<
     visible: boolean;
     x: number;
     y: number;
-    offsetX: number;
-    offsetY: number;
     width: number;
     height: number;
     window: string;
   },
   {
     mousedown: boolean;
+    offsetX: number;
+    offsetY: number;
   }
 > = function (ctx) {
   ctx.mount = () => {
@@ -148,17 +158,28 @@ let WindowFrame: Component<
           this.offsetX = this.x - e.clientX;
           this.offsetY = this.y - e.clientY;
 
-          message_queue.push({
-            t: "window_focus",
-            window: this.window,
-          } as WindowFocusRequest);
+          if (state.window_order.includes(this.window)) {
+            state.window_order.splice(
+              state.window_order.indexOf(this.window),
+              1,
+            );
+          }
+          state.window_order.push(this.window);
         }}
       >
         <div class="title-bar-text">{this.window}</div>
         <div class="title-bar-controls">
           <button aria-label="Minimize"></button>
           <button aria-label="Maximize"></button>
-          <button aria-label="Close"></button>
+          <button
+            aria-label="Close"
+            on:click={() => {
+              message_queue.push({
+                t: "window_close",
+                window: this.window,
+              } as WindowCloseRequest);
+            }}
+          ></button>
         </div>
       </div>
     </div>
@@ -203,12 +224,30 @@ function step(timestamp: DOMHighResTimeStamp) {
         if (response_parsed[segment]["t"] == "window_focus") {
           let window_focus_reply = response_parsed[segment] as WindowFocusReply;
 
-          state.window_order.splice(
-            state.window_order.indexOf(window_focus_reply.window),
-            1,
-          );
+          if (state.window_order.includes(window_focus_reply.window)) {
+            state.window_order.splice(
+              state.window_order.indexOf(window_focus_reply.window),
+              1,
+            );
+          }
           state.window_order.push(window_focus_reply.window);
           state.window_order = state.window_order;
+        } else if (response_parsed[segment]["t"] == "window_close") {
+          // let window_close_reply = response_parsed[segment] as WindowCloseReply;
+          //
+          // if (state.window_order.includes(window_close_reply.window)) {
+          //   state.window_order.splice(
+          //     state.window_order.indexOf(window_close_reply.window),
+          //     1,
+          //   );
+          // }
+          //
+          // if (state.windows[window_close_reply.window]) {
+          //   delete state.windows[window_close_reply.window];
+          // }
+          // if (state.window_frames[window_close_reply.window]) {
+          //   delete state.window_frames[window_close_reply.window];
+          // }
         } else if (response_parsed[segment]["t"] == "mouse_move") {
           let mouse_move_reply = response_parsed[segment] as MouseMoveReply;
           let event = new MouseEvent("mousemove", {
@@ -217,8 +256,7 @@ function step(timestamp: DOMHighResTimeStamp) {
             view: window,
           });
           document.dispatchEvent(event);
-        }
-        if (response_parsed[segment]["t"] == "mouse_press") {
+        } else if (response_parsed[segment]["t"] == "mouse_press") {
           let mouse_move_reply = response_parsed[segment] as MousePressReply;
           let event = new MouseEvent("mousepress", {
             clientX: mouse_move_reply.x,
@@ -265,6 +303,20 @@ function step(timestamp: DOMHighResTimeStamp) {
               width: window_map_reply.width,
               height: window_map_reply.height,
             };
+
+            if (
+              state.windows[window_map_reply.window].x != window_map_reply.x ||
+              state.windows[window_map_reply.window].y != window_map_reply.y
+            ) {
+              message_queue.push({
+                t: "window_map",
+                x: state.windows[window_map_reply.window].x,
+                y: state.windows[window_map_reply.window].y,
+                window: state.windows[window_map_reply.window].window,
+                width: state.windows[window_map_reply.window].width,
+                height: state.windows[window_map_reply.window].height,
+              } as WindowMapRequest);
+            }
           }
 
           state.windows = state.windows;
@@ -289,21 +341,23 @@ function step(timestamp: DOMHighResTimeStamp) {
                 height={use(state.windows).map(
                   () => state.windows[window_map_reply.window].height,
                 )}
-                visible={use(state.windows).map(
-                  () => state.windows[window_map_reply.window].visible,
-                )}
+                visible={use(state.windows).map(() => {
+                  if (state.windows[window_map_reply.window].visible) {
+                    message_queue.push({
+                      t: "window_register_border",
+                      window: window_map_reply.window,
+                      x: 0,
+                      y: -BORDER_WIDTH,
+                      width: 0,
+                      height: 0,
+                    } as WindowRegisterBorderRequest);
+                  }
+
+                  return state.windows[window_map_reply.window].visible;
+                })}
                 window={window_map_reply.window}
               />
             );
-
-            message_queue.push({
-              t: "window_register_border",
-              window: window_map_reply.window,
-              x: 0,
-              y: -BORDER_WIDTH,
-              width: 0,
-              height: 0,
-            } as WindowRegisterBorderRequest);
           }
 
           state.window_frames = state.window_frames;
@@ -371,6 +425,7 @@ App.style = css`
 `;
 
 document.querySelector("#app")?.replaceWith(<App />);
-document.addEventListener("contextmenu", () => {
+
+document.oncontextmenu = document.body.oncontextmenu = function () {
   return false;
-});
+};
