@@ -113,11 +113,14 @@ let WindowFrame: Component<
     mouse_x: number;
     mouse_y: number;
 
+    n_resize: boolean;
     e_resize: boolean;
     s_resize: boolean;
     w_resize: boolean;
     se_resize: boolean;
+    ne_resize: boolean;
     sw_resize: boolean;
+    nw_resize: boolean;
 
     old_x: number;
     old_y: number;
@@ -140,11 +143,14 @@ let WindowFrame: Component<
 
     document.addEventListener("mouseup", () => {
       this.mousedown = false;
+      this.n_resize = false;
       this.e_resize = false;
       this.s_resize = false;
       this.w_resize = false;
       this.se_resize = false;
       this.sw_resize = false;
+      this.ne_resize = false;
+      this.nw_resize = false;
 
       if (this.mousedown) {
         message_queue.push({
@@ -189,6 +195,71 @@ let WindowFrame: Component<
         state.windows = state.windows;
       }
 
+      if (this.n_resize) {
+        let delta_y = e.clientY - this.mouse_y;
+        const new_height = Math.max(this.old_height - delta_y, MIN_SIZE);
+                const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
+
+
+        message_queue.push({
+          t: "window_map",
+          x: state.windows[this.window].x,
+          y: new_y,
+          window: state.windows[this.window].window,
+          width: state.windows[this.window].width,
+          height: new_height,
+        } as WindowMapRequest);
+
+        state.windows[this.window].y = new_y;
+        state.windows[this.window].height = new_height;
+        state.windows = state.windows;
+      }
+      if (this.ne_resize) {
+        let delta_y = e.clientY - this.mouse_y;
+        let delta_x = e.clientX - this.mouse_x;
+        const new_height = Math.max(this.old_height - delta_y, MIN_SIZE);
+                const new_width = Math.max(this.old_width + delta_x, MIN_SIZE);
+                const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
+
+
+        message_queue.push({
+          t: "window_map",
+          x: state.windows[this.window].x,
+          y: new_y,
+          window: state.windows[this.window].window,
+          width: new_width,
+          height: new_height,
+        } as WindowMapRequest);
+
+        state.windows[this.window].y = new_y;
+        state.windows[this.window].height = new_height;
+        state.windows[this.window].width= new_width;
+        state.windows = state.windows;
+      }
+      if (this.nw_resize) {
+        let delta_y = e.clientY - this.mouse_y;
+        let delta_x = e.clientX - this.mouse_x;
+        const new_height = Math.max(this.old_height - delta_y, MIN_SIZE);
+                const new_width = Math.max(this.old_width - delta_x, MIN_SIZE);
+                const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
+        const new_x = Math.max(this.old_x + delta_x, 0);
+
+
+        message_queue.push({
+          t: "window_map",
+          x: new_x,
+          y: new_y,
+          window: state.windows[this.window].window,
+          width: new_width,
+          height: new_height,
+        } as WindowMapRequest);
+
+        state.windows[this.window].x = new_x;
+        state.windows[this.window].y = new_y;
+        state.windows[this.window].height = new_height;
+        state.windows[this.window].width= new_width;
+        state.windows = state.windows;
+      }
       if (this.s_resize) {
         let delta_y = e.clientY - this.mouse_y;
         const new_height = Math.max(this.old_height + delta_y, MIN_SIZE);
@@ -356,6 +427,56 @@ let WindowFrame: Component<
           "pointer-events": "none",
         }}
       >
+
+        <div
+          style={{
+            "pointer-events": "auto",
+            cursor: "nwse-resize",
+          }}
+          on:mousedown={(e: MouseEvent) => {
+            this.nw_resize = true;
+            this.mouse_x = e.clientX;
+            this.mouse_y = e.clientY;
+
+            this.old_x = this.x;
+            this.old_y = this.y;
+            this.old_width = this.width;
+            this.old_height = this.height;
+          }}
+        ></div>
+        <div
+          style={{
+            "pointer-events": "auto",
+            cursor: "ns-resize",
+          }}
+          on:mousedown={(e: MouseEvent) => {
+            this.n_resize = true;
+            this.mouse_x = e.clientX;
+            this.mouse_y = e.clientY;
+
+            this.old_x = this.x;
+            this.old_y = this.y;
+            this.old_width = this.width;
+            this.old_height = this.height;
+          }}
+        ></div>
+        <div
+          style={{
+            "pointer-events": "auto",
+            cursor: "nesw-resize",
+          }}
+          on:mousedown={(e: MouseEvent) => {
+            this.ne_resize = true;
+            this.mouse_x = e.clientX;
+            this.mouse_y = e.clientY;
+
+            this.old_x = this.x;
+            this.old_y = this.y;
+            this.old_width = this.width;
+            this.old_height = this.height;
+          }}
+        ></div>
+
         <div
           style={{
             "pointer-events": "auto",
@@ -451,7 +572,7 @@ let WindowFrame: Component<
 WindowFrame.style = css`
   .window_handles {
     grid-template-columns: ${BORDER_BASE.toString()}px 1fr ${BORDER_BASE.toString()}px;
-    grid-template-rows: 1fr ${BORDER_BASE.toString()}px;
+    grid-template-rows: ${BORDER_BASE.toString()}px 1fr ${BORDER_BASE.toString()}px;
   }
 `;
 
