@@ -79,7 +79,7 @@ type WindowMapRequest = {
 
 type RunProgramRequest = {
   t: "run_program";
-  command: string;
+  command: string[];
 };
 
 type WindowData = {
@@ -198,8 +198,7 @@ let WindowFrame: Component<
       if (this.n_resize) {
         let delta_y = e.clientY - this.mouse_y;
         const new_height = Math.max(this.old_height - delta_y, MIN_SIZE);
-                const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
-
+        const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
 
         message_queue.push({
           t: "window_map",
@@ -218,9 +217,8 @@ let WindowFrame: Component<
         let delta_y = e.clientY - this.mouse_y;
         let delta_x = e.clientX - this.mouse_x;
         const new_height = Math.max(this.old_height - delta_y, MIN_SIZE);
-                const new_width = Math.max(this.old_width + delta_x, MIN_SIZE);
-                const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
-
+        const new_width = Math.max(this.old_width + delta_x, MIN_SIZE);
+        const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
 
         message_queue.push({
           t: "window_map",
@@ -233,17 +231,16 @@ let WindowFrame: Component<
 
         state.windows[this.window].y = new_y;
         state.windows[this.window].height = new_height;
-        state.windows[this.window].width= new_width;
+        state.windows[this.window].width = new_width;
         state.windows = state.windows;
       }
       if (this.nw_resize) {
         let delta_y = e.clientY - this.mouse_y;
         let delta_x = e.clientX - this.mouse_x;
         const new_height = Math.max(this.old_height - delta_y, MIN_SIZE);
-                const new_width = Math.max(this.old_width - delta_x, MIN_SIZE);
-                const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
+        const new_width = Math.max(this.old_width - delta_x, MIN_SIZE);
+        const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
         const new_x = Math.max(this.old_x + delta_x, 0);
-
 
         message_queue.push({
           t: "window_map",
@@ -257,7 +254,7 @@ let WindowFrame: Component<
         state.windows[this.window].x = new_x;
         state.windows[this.window].y = new_y;
         state.windows[this.window].height = new_height;
-        state.windows[this.window].width= new_width;
+        state.windows[this.window].width = new_width;
         state.windows = state.windows;
       }
       if (this.s_resize) {
@@ -384,7 +381,7 @@ let WindowFrame: Component<
                   x: BORDER_BASE,
                   y: BORDER_WIDTH + BORDER_BASE,
                   window: state.windows[this.window].window,
-                  width: window.screen.width + - BORDER_BASE*2,
+                  width: window.screen.width + -BORDER_BASE * 2,
                   height:
                     window.screen.height - BORDER_WIDTH + -BORDER_BASE * 2,
                 } as WindowMapRequest);
@@ -392,7 +389,7 @@ let WindowFrame: Component<
                 state.windows[this.window].x = BORDER_BASE;
                 state.windows[this.window].y = BORDER_WIDTH + BORDER_BASE;
                 state.windows[this.window].width =
-                  window.screen.width + - BORDER_BASE *2;
+                  window.screen.width + -BORDER_BASE * 2;
                 state.windows[this.window].height =
                   window.screen.height - BORDER_WIDTH + -BORDER_BASE * 2;
                 state.windows = state.windows;
@@ -427,7 +424,6 @@ let WindowFrame: Component<
           "pointer-events": "none",
         }}
       >
-
         <div
           style={{
             "pointer-events": "auto",
@@ -784,42 +780,49 @@ let App: Component<{}, { counter: number; x: number; y: number }> = function (
   };
 
   return (
-    <div>
-      {use(this.x)},{use(this.y)}
-      {use(state.windows).map((wins) => JSON.stringify(wins))}
-      {use(state.window_order).map((wins) => JSON.stringify(wins))}
+    <div style={{ width: "100%", height: "100%" }}>
+      <div
+        on:mousedown={() => {
+          message_queue.push({
+            t: "run_program",
+            command: ["/usr/bin/rofi", "-show", "drun"],
+          } as RunProgramRequest);
+        }}
+        style={{ width: "100%", height: "100%" }}
+      >
+        <div style={{ display: "none" }}>
+          {use(this.x)},{use(this.y)}
+          {use(state.windows).map((wins) => JSON.stringify(wins))}
+          {use(state.window_order).map((wins) => JSON.stringify(wins))}
+          <button
+            on:click={() => {
+              message_queue.push({
+                t: "run_program",
+                command: ["/usr/bin/kitty"],
+              } as RunProgramRequest);
+            }}
+          >
+            Open kitty!
+          </button>
+          <button
+            on:click={() => {
+              message_queue.push({
+                t: "run_program",
+                command: ["/usr/bin/xdemineur"],
+              } as RunProgramRequest);
+            }}
+          >
+            Open minesweaper!
+          </button>
+        </div>
+      </div>
       {use(state.window_frames).map((wins) => {
         return Object.values(wins);
       })}
-      <button
-        on:click={() => {
-          message_queue.push({
-            t: "run_program",
-            command: "/usr/bin/kitty",
-          } as RunProgramRequest);
-        }}
-      >
-        Open kitty!
-      </button>
-      <button
-        on:click={() => {
-          message_queue.push({
-            t: "run_program",
-            command: "/usr/bin/xdemineur",
-          } as RunProgramRequest);
-        }}
-      >
-        Open minesweaper!
-      </button>
     </div>
   );
 };
-App.style = css`
-  :scope {
-    border: 4px dashed cornflowerblue;
-    padding: 1em;
-  }
-`;
+App.style = css``;
 
 document.querySelector("#app")?.replaceWith(<App />);
 
