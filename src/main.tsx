@@ -55,6 +55,21 @@ type WindowMapReply = {
   y: number;
   width: number;
   height: number;
+  win_t:
+    | "WINDOW_TYPE_DESKTOP"
+    | "WINDOW_TYPE_DOCK"
+    | "WINDOW_TYPE_TOOLBAR"
+    | "WINDOW_TYPE_MENU"
+    | "WINDOW_TYPE_UTILITY"
+    | "WINDOW_TYPE_SPLASH"
+    | "WINDOW_TYPE_DIALOG"
+    | "WINDOW_TYPE_DROPDOWN_MENU"
+    | "WINDOW_TYPE_POPUP_MENU"
+    | "WINDOW_TYPE_TOOLTIP"
+    | "WINDOW_TYPE_NOTIFICATION"
+    | "WINDOW_TYPE_COMBO"
+    | "WINDOW_TYPE_DND"
+    | "WINDOW_TYPE_NORMAL";
 };
 
 type MouseMoveReply = {
@@ -412,9 +427,10 @@ let WindowFrame: Component<
     });
   };
   return (
-    <div id="window-base"
+    <div
+      id="window-base"
       on:mousedown={(e: MouseEvent) => {
-        if((e.target as HTMLElement).id != "window-base"){
+        if ((e.target as HTMLElement).id != "window-base") {
           return;
         }
 
@@ -723,6 +739,7 @@ function step(timestamp: DOMHighResTimeStamp) {
           state.window_order.push(window_focus_reply.window);
           state.window_order = state.window_order;
         } else if (response_parsed[segment]["t"] == "window_close") {
+          // TODO: causes bugs! properly destroy elements some other way!
           // let window_close_reply = response_parsed[segment] as WindowCloseReply;
           //
           // if (state.window_order.includes(window_close_reply.window)) {
@@ -759,105 +776,108 @@ function step(timestamp: DOMHighResTimeStamp) {
         } else if (response_parsed[segment]["t"] == "window_map") {
           let window_map_reply = response_parsed[segment] as WindowMapReply;
 
-          if (!state.windows[window_map_reply.window]) {
-            if (
-              !state.windows[window_map_reply.window] &&
-              window_map_reply.x == 0 &&
-              window_map_reply.y == 0 &&
-              window_map_reply.visible
-            ) {
-              message_queue.push({
-                t: "window_map",
-                x: 100,
-                y: 100,
+          if (window_map_reply.win_t == "WINDOW_TYPE_NORMAL") {
+            if (!state.windows[window_map_reply.window]) {
+              if (
+                !state.windows[window_map_reply.window] &&
+                window_map_reply.x == 0 &&
+                window_map_reply.y == 0 &&
+                window_map_reply.visible
+              ) {
+                message_queue.push({
+                  t: "window_map",
+                  x: 100,
+                  y: 100,
+                  window: window_map_reply.window,
+                  width: 500,
+                  height: 500,
+                } as WindowMapRequest);
+                window_map_reply.x = 100;
+                window_map_reply.y = 100;
+              }
+
+              state.windows[window_map_reply.window] = {
                 window: window_map_reply.window,
-                width: 500,
-                height: 500,
-              } as WindowMapRequest);
-              window_map_reply.x = 100;
-              window_map_reply.y = 100;
-            }
-
-            state.windows[window_map_reply.window] = {
-              window: window_map_reply.window,
-              name: window_map_reply.name,
-              visible: window_map_reply.visible,
-              x: window_map_reply.x,
-              y: window_map_reply.y,
-              width: window_map_reply.width,
-              height: window_map_reply.height,
-            };
-          } else if (state.windows[window_map_reply.window]) {
-            state.windows[window_map_reply.window] = {
-              window: window_map_reply.window,
-              visible: window_map_reply.visible,
-              name: window_map_reply.name,
-              x: state.windows[window_map_reply.window].x,
-              y: state.windows[window_map_reply.window].y,
-              width: state.windows[window_map_reply.window].width,
-              height: state.windows[window_map_reply.window].height,
-            };
-
-            if (
-              state.windows[window_map_reply.window].x != window_map_reply.x ||
-              state.windows[window_map_reply.window].y != window_map_reply.y
-            ) {
-              message_queue.push({
-                t: "window_map",
+                name: window_map_reply.name,
+                visible: window_map_reply.visible,
+                x: window_map_reply.x,
+                y: window_map_reply.y,
+                width: window_map_reply.width,
+                height: window_map_reply.height,
+              };
+            } else if (state.windows[window_map_reply.window]) {
+              state.windows[window_map_reply.window] = {
+                window: window_map_reply.window,
+                visible: window_map_reply.visible,
+                name: window_map_reply.name,
                 x: state.windows[window_map_reply.window].x,
                 y: state.windows[window_map_reply.window].y,
-                window: state.windows[window_map_reply.window].window,
                 width: state.windows[window_map_reply.window].width,
                 height: state.windows[window_map_reply.window].height,
-              } as WindowMapRequest);
+              };
+
+              if (
+                state.windows[window_map_reply.window].x !=
+                  window_map_reply.x ||
+                state.windows[window_map_reply.window].y != window_map_reply.y
+              ) {
+                message_queue.push({
+                  t: "window_map",
+                  x: state.windows[window_map_reply.window].x,
+                  y: state.windows[window_map_reply.window].y,
+                  window: state.windows[window_map_reply.window].window,
+                  width: state.windows[window_map_reply.window].width,
+                  height: state.windows[window_map_reply.window].height,
+                } as WindowMapRequest);
+              }
             }
+
+            state.windows = state.windows;
+
+            if (!state.window_order.includes(window_map_reply.window)) {
+              state.window_order.push(window_map_reply.window);
+              state.window_order = state.window_order;
+            }
+
+            if (!window_map_reply.has_border) {
+              message_queue.push({
+                t: "window_register_border",
+                window: window_map_reply.window,
+                x: -BORDER_BASE,
+                y: -BORDER_WIDTH + -BORDER_BASE,
+                width: BORDER_BASE,
+                height: BORDER_BASE,
+              } as WindowRegisterBorderRequest);
+            }
+
+            if (!state.window_frames[window_map_reply.window]) {
+              state.window_frames[window_map_reply.window] = (
+                <WindowFrame
+                  name={use(state.windows).map(
+                    () => state.windows[window_map_reply.window].name,
+                  )}
+                  x={use(state.windows).map(
+                    () => state.windows[window_map_reply.window].x,
+                  )}
+                  y={use(state.windows).map(
+                    () => state.windows[window_map_reply.window].y,
+                  )}
+                  width={use(state.windows).map(
+                    () => state.windows[window_map_reply.window].width,
+                  )}
+                  height={use(state.windows).map(
+                    () => state.windows[window_map_reply.window].height,
+                  )}
+                  visible={use(state.windows).map(() => {
+                    return state.windows[window_map_reply.window].visible;
+                  })}
+                  window={window_map_reply.window}
+                />
+              );
+            }
+
+            state.window_frames = state.window_frames;
           }
-
-          state.windows = state.windows;
-
-          if (!state.window_order.includes(window_map_reply.window)) {
-            state.window_order.push(window_map_reply.window);
-            state.window_order = state.window_order;
-          }
-
-          if(!window_map_reply.has_border){
-            message_queue.push({
-              t: "window_register_border",
-              window: window_map_reply.window,
-              x: -BORDER_BASE,
-              y: -BORDER_WIDTH + -BORDER_BASE,
-              width: BORDER_BASE,
-              height: BORDER_BASE,
-            } as WindowRegisterBorderRequest);
-          }
-
-          if (!state.window_frames[window_map_reply.window]) {
-            state.window_frames[window_map_reply.window] = (
-              <WindowFrame
-                name={use(state.windows).map(
-                  () => state.windows[window_map_reply.window].name,
-                )}
-                x={use(state.windows).map(
-                  () => state.windows[window_map_reply.window].x,
-                )}
-                y={use(state.windows).map(
-                  () => state.windows[window_map_reply.window].y,
-                )}
-                width={use(state.windows).map(
-                  () => state.windows[window_map_reply.window].width,
-                )}
-                height={use(state.windows).map(
-                  () => state.windows[window_map_reply.window].height,
-                )}
-                visible={use(state.windows).map(() => {
-                  return state.windows[window_map_reply.window].visible;
-                })}
-                window={window_map_reply.window}
-              />
-            );
-          }
-
-          state.window_frames = state.window_frames;
         }
       }
     },
