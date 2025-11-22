@@ -50,6 +50,7 @@ type WindowMapReply = {
   window: string;
   name: string;
   visible: boolean;
+  has_border: boolean;
   x: number;
   y: number;
   width: number;
@@ -411,9 +412,11 @@ let WindowFrame: Component<
     });
   };
   return (
-    <div
-      on:mousedown={() => {
-        this.mousedown = true;
+    <div id="window-base"
+      on:mousedown={(e: MouseEvent) => {
+        if((e.target as HTMLElement).id != "window-base"){
+          return;
+        }
 
         if (state.window_order.includes(this.window)) {
           state.window_order.splice(state.window_order.indexOf(this.window), 1);
@@ -817,7 +820,7 @@ function step(timestamp: DOMHighResTimeStamp) {
             state.window_order = state.window_order;
           }
 
-          if (!state.window_frames[window_map_reply.window]) {
+          if(!window_map_reply.has_border){
             message_queue.push({
               t: "window_register_border",
               window: window_map_reply.window,
@@ -826,7 +829,9 @@ function step(timestamp: DOMHighResTimeStamp) {
               width: BORDER_BASE,
               height: BORDER_BASE,
             } as WindowRegisterBorderRequest);
+          }
 
+          if (!state.window_frames[window_map_reply.window]) {
             state.window_frames[window_map_reply.window] = (
               <WindowFrame
                 name={use(state.windows).map(
