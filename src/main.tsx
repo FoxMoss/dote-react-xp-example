@@ -1,54 +1,23 @@
-import {
-  css,
-  type Component,
-  type Stateful,
-  createState,
-} from "dreamland/core";
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createRoot } from 'react-dom/client';
 
-type WindowDataSegment = { t: string };
+const root = createRoot(document.getElementById('app')!);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
 
-type WindowFocusReply = {
-  t: "window_focus";
+// Type definitions
+type WindowData = {
   window: string;
-};
-
-type WindowCloseReply = {
-  t: "window_close";
-  window: string;
-};
-
-type WindowCloseRequest = {
-  t: "window_close";
-  window: string;
-};
-
-type RenderReply = {
-  t: "render_reply";
-};
-
-type WindowFocusRequest = {
-  t: "window_focus";
-  window: string;
-};
-
-type WindowIconReply = {
-  t: "window_icon";
-  window: string;
-  image: string;
-};
-
-type WindowReorderRequest = {
-  t: "window_reorder";
-  windows: string[];
-};
-
-type WindowRegisterBorderRequest = {
-  t: "window_register_border";
-  window: string;
+  name: string;
+  visible: boolean;
   x: number;
   y: number;
   width: number;
   height: number;
+  image: string | null;
 };
 
 type WindowMapReply = {
@@ -61,1011 +30,556 @@ type WindowMapReply = {
   y: number;
   width: number;
   height: number;
-  win_t:
-    | "WINDOW_TYPE_DESKTOP"
-    | "WINDOW_TYPE_DOCK"
-    | "WINDOW_TYPE_TOOLBAR"
-    | "WINDOW_TYPE_MENU"
-    | "WINDOW_TYPE_UTILITY"
-    | "WINDOW_TYPE_SPLASH"
-    | "WINDOW_TYPE_DIALOG"
-    | "WINDOW_TYPE_DROPDOWN_MENU"
-    | "WINDOW_TYPE_POPUP_MENU"
-    | "WINDOW_TYPE_TOOLTIP"
-    | "WINDOW_TYPE_NOTIFICATION"
-    | "WINDOW_TYPE_COMBO"
-    | "WINDOW_TYPE_DND"
-    | "WINDOW_TYPE_NORMAL";
-};
-
-type MouseMoveReply = {
-  t: "mouse_move";
-  x: number;
-  y: number;
-};
-
-type MousePressReply = {
-  t: "mouse_press";
-  state: number;
-  x: number;
-  y: number;
-};
-type WindowMapRequest = {
-  t: "window_map";
-  window: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
-type RunProgramRequest = {
-  t: "run_program";
-  command: string[];
-};
-
-type WindowData = {
-  window: string;
-  name: string;
-  visible: boolean;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  image: string | null;
+  win_t: string;
 };
 
 const BORDER_WIDTH = 26;
 const MIN_SIZE = 150;
 const BORDER_BASE = 3;
-let WindowFrame: Component<
-  {
-    visible: boolean;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    window: string;
-    name: string;
-    icon: string | null;
-  },
-  {
-    mousedown: boolean;
 
-    offset_x: number;
-    offset_y: number;
+// Mock cefQuery for demo purposes (replace with actual implementation)
+const mockCefQuery = (options: any) => {
+  setTimeout(() => {
+    options.onSuccess('[]');
+  }, 16);
+};
 
-    fullscreen: boolean;
+const WindowFrame = ({ 
+  windowId, 
+  windowData, 
+  zIndex, 
+  onFocus, 
+  onClose,
+  onMove,
+  onResize 
+}: any) => {
+  const [state, setState] = useState({
+    mousedown: false,
+    offset_x: 0,
+    offset_y: 0,
+    fullscreen: false,
+    mouse_x: 0,
+    mouse_y: 0,
+    n_resize: false,
+    e_resize: false,
+    s_resize: false,
+    w_resize: false,
+    se_resize: false,
+    ne_resize: false,
+    sw_resize: false,
+    nw_resize: false,
+    old_x: 0,
+    old_y: 0,
+    old_width: 0,
+    old_height: 0
+  });
 
-    mouse_x: number;
-    mouse_y: number;
-
-    n_resize: boolean;
-    e_resize: boolean;
-    s_resize: boolean;
-    w_resize: boolean;
-    se_resize: boolean;
-    ne_resize: boolean;
-    sw_resize: boolean;
-    nw_resize: boolean;
-
-    old_x: number;
-    old_y: number;
-    old_width: number;
-    old_height: number;
-  }
-> = function (ctx) {
-  ctx.mount = () => {
-    let window_x = Math.max(state.windows[this.window].x, 0);
-    let window_y = Math.max(state.windows[this.window].y, BORDER_WIDTH);
-
-    message_queue.push({
-      t: "window_map",
-      x: window_x,
-      y: window_y,
-      window: state.windows[this.window].window,
-      width: state.windows[this.window].width,
-      height: state.windows[this.window].height,
-    } as WindowMapRequest);
-
-    document.addEventListener("mouseup", () => {
-      this.n_resize = false;
-      this.e_resize = false;
-      this.s_resize = false;
-      this.w_resize = false;
-      this.se_resize = false;
-      this.sw_resize = false;
-      this.ne_resize = false;
-      this.nw_resize = false;
-
-      if (this.mousedown) {
-        message_queue.push({
-          t: "window_focus",
-          window: this.window,
-        } as WindowFocusRequest);
-
-        if (state.window_order.includes(this.window)) {
-          state.window_order.splice(state.window_order.indexOf(this.window), 1);
+  useEffect(() => {
+    const handleMouseUp = () => {
+      if (state.mousedown || 
+          state.n_resize || state.e_resize || state.s_resize || state.w_resize ||
+          state.se_resize || state.ne_resize || state.sw_resize || state.nw_resize) {
+        
+        if (state.mousedown) {
+          onFocus(windowId);
         }
-        state.window_order.push(this.window);
+        
+        setState(prev => ({
+          ...prev,
+          mousedown: false,
+          n_resize: false,
+          e_resize: false,
+          s_resize: false,
+          w_resize: false,
+          se_resize: false,
+          ne_resize: false,
+          sw_resize: false,
+          nw_resize: false
+        }));
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const window_corrected_x = Math.max(windowData.x, 0);
+      const window_corrected_y = Math.max(windowData.y, BORDER_WIDTH);
+
+      if (state.fullscreen && (state.mousedown || 
+          state.n_resize || state.e_resize || state.s_resize || state.w_resize ||
+          state.se_resize || state.ne_resize || state.sw_resize || state.nw_resize)) {
+        setState(prev => ({ ...prev, fullscreen: false }));
+        onMove(windowId, state.old_x, state.old_y);
+        onResize(windowId, state.old_width, state.old_height);
+        setState(prev => ({ ...prev, offset_x: -(state.old_width / 2) }));
       }
 
-      this.mousedown = false;
-    });
-    document.addEventListener("mousemove", (e: MouseEvent) => {
-      const window_corrected_x = Math.max(this.x, 0);
-      const window_corrected_y = Math.max(this.y, BORDER_WIDTH);
-
-      if (
-        this.nw_resize ||
-        this.s_resize ||
-        this.se_resize ||
-        this.w_resize ||
-        this.sw_resize ||
-        this.n_resize ||
-        this.e_resize ||
-        this.ne_resize ||
-        this.mousedown
-      ) {
-        if (state.window_order.includes(this.window)) {
-          state.window_order.splice(state.window_order.indexOf(this.window), 1);
-        }
-        state.window_order.push(this.window);
-        state.window_order = state.window_order;
+      if (state.mousedown) {
+        const window_x = Math.max(e.clientX + state.offset_x, 0);
+        const window_y = Math.max(e.clientY + state.offset_y, BORDER_WIDTH);
+        onMove(windowId, window_x, window_y);
+        onFocus(windowId);
       }
 
-      if (
-        this.fullscreen &&
-        (this.nw_resize ||
-          this.s_resize ||
-          this.se_resize ||
-          this.w_resize ||
-          this.sw_resize ||
-          this.n_resize ||
-          this.e_resize ||
-          this.ne_resize ||
-          this.mousedown)
-      ) {
-        this.fullscreen = false;
-        message_queue.push({
-          t: "window_map",
-          x: this.old_x,
-          y: this.old_y,
-          window: state.windows[this.window].window,
-          width: this.old_width,
-          height: this.old_height,
-        } as WindowMapRequest);
-
-        state.windows[this.window].x = this.old_x;
-        state.windows[this.window].y = this.old_y;
-        state.windows[this.window].width = this.old_width;
-        state.windows[this.window].height = this.old_height;
-        state.windows = state.windows;
-
-        this.offset_x = -(this.old_width / 2);
+      if (state.e_resize) {
+        const delta_x = e.clientX - state.mouse_x;
+        const new_width = Math.max(state.old_width + delta_x, MIN_SIZE);
+        onResize(windowId, new_width, windowData.height);
+        onFocus(windowId);
       }
 
-      if (this.mousedown) {
-        const window_x = Math.max(e.clientX + this.offset_x, 0);
-        const window_y = Math.max(e.clientY + this.offset_y, BORDER_WIDTH);
-
-        message_queue.push({
-          t: "window_map",
-          x: window_x,
-          y: window_y,
-          window: state.windows[this.window].window,
-          width: state.windows[this.window].width,
-          height: state.windows[this.window].height,
-        } as WindowMapRequest);
-
-        state.windows[this.window].x = window_x;
-        state.windows[this.window].y = window_y;
-        state.windows = state.windows;
+      if (state.n_resize) {
+        const delta_y = e.clientY - state.mouse_y;
+        const new_height = Math.max(state.old_height - delta_y, MIN_SIZE);
+        const new_y = Math.max(state.old_y + delta_y, BORDER_WIDTH);
+        onMove(windowId, windowData.x, new_y);
+        onResize(windowId, windowData.width, new_height);
+        onFocus(windowId);
       }
 
-      if (this.e_resize) {
-        let delta_x = e.clientX - this.mouse_x;
-        const new_width = Math.max(this.old_width + delta_x, MIN_SIZE);
-
-        message_queue.push({
-          t: "window_map",
-          x: window_corrected_x,
-          y: window_corrected_y,
-          window: state.windows[this.window].window,
-          width: new_width,
-          height: state.windows[this.window].height,
-        } as WindowMapRequest);
-
-        state.windows[this.window].x = window_corrected_x;
-        state.windows[this.window].y = window_corrected_y;
-        state.windows[this.window].width = new_width;
-        state.windows = state.windows;
+      if (state.ne_resize) {
+        const delta_y = e.clientY - state.mouse_y;
+        const delta_x = e.clientX - state.mouse_x;
+        const new_height = Math.max(state.old_height - delta_y, MIN_SIZE);
+        const new_width = Math.max(state.old_width + delta_x, MIN_SIZE);
+        const new_y = Math.max(state.old_y + delta_y, BORDER_WIDTH);
+        onMove(windowId, windowData.x, new_y);
+        onResize(windowId, new_width, new_height);
+        onFocus(windowId);
       }
 
-      if (this.n_resize) {
-        let delta_y = e.clientY - this.mouse_y;
-        const new_height = Math.max(this.old_height - delta_y, MIN_SIZE);
-        const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
-
-        message_queue.push({
-          t: "window_map",
-          x: window_corrected_x,
-          y: new_y,
-          window: state.windows[this.window].window,
-          width: state.windows[this.window].width,
-          height: new_height,
-        } as WindowMapRequest);
-
-        state.windows[this.window].x = window_corrected_x;
-        state.windows[this.window].y = new_y;
-        state.windows[this.window].height = new_height;
-        state.windows = state.windows;
+      if (state.nw_resize) {
+        const delta_y = e.clientY - state.mouse_y;
+        const delta_x = e.clientX - state.mouse_x;
+        const new_height = Math.max(state.old_height - delta_y, MIN_SIZE);
+        const new_width = Math.max(state.old_width - delta_x, MIN_SIZE);
+        const new_y = Math.max(state.old_y + delta_y, BORDER_WIDTH);
+        const new_x = Math.max(state.old_x + delta_x, 0);
+        onMove(windowId, new_x, new_y);
+        onResize(windowId, new_width, new_height);
+        onFocus(windowId);
       }
 
-      if (this.ne_resize) {
-        let delta_y = e.clientY - this.mouse_y;
-        let delta_x = e.clientX - this.mouse_x;
-        const new_height = Math.max(this.old_height - delta_y, MIN_SIZE);
-        const new_width = Math.max(this.old_width + delta_x, MIN_SIZE);
-        const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
-
-        message_queue.push({
-          t: "window_map",
-          x: window_corrected_x,
-          y: new_y,
-          window: state.windows[this.window].window,
-          width: new_width,
-          height: new_height,
-        } as WindowMapRequest);
-
-        state.windows[this.window].x = window_corrected_x;
-        state.windows[this.window].y = new_y;
-        state.windows[this.window].height = new_height;
-        state.windows[this.window].width = new_width;
-        state.windows = state.windows;
+      if (state.s_resize) {
+        const delta_y = e.clientY - state.mouse_y;
+        const new_height = Math.max(state.old_height + delta_y, MIN_SIZE);
+        onResize(windowId, windowData.width, new_height);
+        onFocus(windowId);
       }
 
-      if (this.nw_resize) {
-        let delta_y = e.clientY - this.mouse_y;
-        let delta_x = e.clientX - this.mouse_x;
-        const new_height = Math.max(this.old_height - delta_y, MIN_SIZE);
-        const new_width = Math.max(this.old_width - delta_x, MIN_SIZE);
-        const new_y = Math.max(this.old_y + delta_y, BORDER_WIDTH);
-        const new_x = Math.max(this.old_x + delta_x, 0);
-
-        message_queue.push({
-          t: "window_map",
-          x: new_x,
-          y: new_y,
-          window: state.windows[this.window].window,
-          width: new_width,
-          height: new_height,
-        } as WindowMapRequest);
-
-        state.windows[this.window].x = new_x;
-        state.windows[this.window].y = new_y;
-        state.windows[this.window].height = new_height;
-        state.windows[this.window].width = new_width;
-        state.windows = state.windows;
+      if (state.se_resize) {
+        const delta_y = e.clientY - state.mouse_y;
+        const delta_x = e.clientX - state.mouse_x;
+        const new_height = Math.max(state.old_height + delta_y, MIN_SIZE);
+        const new_width = Math.max(state.old_width + delta_x, MIN_SIZE);
+        onResize(windowId, new_width, new_height);
+        onFocus(windowId);
       }
 
-      if (this.s_resize) {
-        let delta_y = e.clientY - this.mouse_y;
-        const new_height = Math.max(this.old_height + delta_y, MIN_SIZE);
-
-        message_queue.push({
-          t: "window_map",
-          x: window_corrected_x,
-          y: window_corrected_y,
-          window: state.windows[this.window].window,
-          width: state.windows[this.window].width,
-          height: new_height,
-        } as WindowMapRequest);
-
-        state.windows[this.window].x = window_corrected_x;
-        state.windows[this.window].y = window_corrected_y;
-        state.windows[this.window].height = new_height;
-        state.windows = state.windows;
+      if (state.w_resize) {
+        const delta_x = e.clientX - state.mouse_x;
+        const new_width = Math.max(state.old_width - delta_x, MIN_SIZE);
+        const new_x = Math.max(state.old_x + delta_x, 0);
+        onMove(windowId, new_x, windowData.y);
+        onResize(windowId, new_width, windowData.height);
+        onFocus(windowId);
       }
 
-      if (this.se_resize) {
-        let delta_y = e.clientY - this.mouse_y;
-        const new_height = Math.max(this.old_height + delta_y, MIN_SIZE);
-        let delta_x = e.clientX - this.mouse_x;
-        const new_width = Math.max(this.old_width + delta_x, MIN_SIZE);
-
-        message_queue.push({
-          t: "window_map",
-          x: window_corrected_x,
-          y: window_corrected_y,
-          window: state.windows[this.window].window,
-          width: new_width,
-          height: new_height,
-        } as WindowMapRequest);
-
-        state.windows[this.window].x = window_corrected_x;
-        state.windows[this.window].y = window_corrected_y;
-        state.windows[this.window].width = new_width;
-        state.windows[this.window].height = new_height;
-        state.windows = state.windows;
+      if (state.sw_resize) {
+        const delta_x = e.clientX - state.mouse_x;
+        const delta_y = e.clientY - state.mouse_y;
+        const new_width = Math.max(state.old_width - delta_x, MIN_SIZE);
+        const new_x = Math.max(state.old_x + delta_x, 0);
+        const new_height = Math.max(state.old_height + delta_y, MIN_SIZE);
+        onMove(windowId, new_x, windowData.y);
+        onResize(windowId, new_width, new_height);
+        onFocus(windowId);
       }
+    };
 
-      if (this.w_resize) {
-        let delta_x = e.clientX - this.mouse_x;
-        const new_width = Math.max(this.old_width - delta_x, MIN_SIZE);
-        const new_x = Math.max(this.old_x + delta_x, 0);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', handleMouseMove);
 
-        message_queue.push({
-          t: "window_map",
-          x: new_x,
-          y: window_corrected_y,
-          window: state.windows[this.window].window,
-          width: new_width,
-          height: state.windows[this.window].height,
-        } as WindowMapRequest);
+    return () => {
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, [state, windowId, windowData, onFocus, onMove, onResize]);
 
-        state.windows[this.window].x = new_x;
-        state.windows[this.window].y = window_corrected_y;
-        state.windows[this.window].width = new_width;
-        state.windows = state.windows;
-      }
-
-      if (this.sw_resize) {
-        let delta_x = e.clientX - this.mouse_x;
-        const new_width = Math.max(this.old_width - delta_x, MIN_SIZE);
-        const new_x = Math.max(this.old_x + delta_x, 0);
-        let delta_y = e.clientY - this.mouse_y;
-        const new_height = Math.max(this.old_height + delta_y, MIN_SIZE);
-
-        message_queue.push({
-          t: "window_map",
-          x: new_x,
-          y: window_corrected_y,
-          window: state.windows[this.window].window,
-          width: new_width,
-          height: new_height,
-        } as WindowMapRequest);
-
-        state.windows[this.window].x = new_x;
-        state.windows[this.window].y = window_corrected_y;
-        state.windows[this.window].width = new_width;
-        state.windows[this.window].height = new_height;
-        state.windows = state.windows;
-      }
-    });
+  const handleTitleBarMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).id !== 'title-bar') return;
+    
+    setState(prev => ({
+      ...prev,
+      mousedown: true,
+      offset_x: windowData.x - e.clientX,
+      offset_y: windowData.y - e.clientY,
+      mouse_x: e.clientX,
+      mouse_y: e.clientY
+    }));
+    onFocus(windowId);
   };
-  return (
-    <div
-      id="window-base"
-      on:mousedown={(e: MouseEvent) => {
-        if ((e.target as HTMLElement).id != "window-base") {
-          return;
-        }
 
-        if (state.window_order.includes(this.window)) {
-          state.window_order.splice(state.window_order.indexOf(this.window), 1);
-        }
-        state.window_order.push(this.window);
-        state.window_order = state.window_order;
-      }}
-    >
+  const handleMaximize = () => {
+    setState(prev => ({
+      ...prev,
+      fullscreen: true,
+      old_x: windowData.x,
+      old_y: windowData.y,
+      old_width: windowData.width,
+      old_height: windowData.height
+    }));
+    
+    onMove(windowId, BORDER_BASE, BORDER_WIDTH + BORDER_BASE);
+    onResize(windowId, window.screen.width - BORDER_BASE * 2, window.screen.height - BORDER_WIDTH - BORDER_BASE * 2);
+  };
+
+  const startResize = (direction: string) => (e: React.MouseEvent) => {
+    setState(prev => ({
+      ...prev,
+      [`${direction}_resize`]: true,
+      mouse_x: e.clientX,
+      mouse_y: e.clientY,
+      old_x: windowData.x,
+      old_y: windowData.y,
+      old_width: windowData.width,
+      old_height: windowData.height
+    }));
+  };
+
+  if (!windowData.visible) return null;
+
+  return (
+    <>
       <div
+        id="window-base"
         style={{
-          position: "absolute",
-          left: use(this.x).map((x) => x - BORDER_BASE + "px"),
-          top: use(this.y).map((y) => y + -BORDER_WIDTH + -BORDER_BASE + "px"),
-          width: use(this.width).map((w) => w + BORDER_BASE * 2 + "px"),
-          height: use(this.height).map((h) => h + BORDER_WIDTH + BORDER_BASE - 1 + "px"),
-          display: use(this.visible).map((v) => (v ? "block" : "none")),
-          cursor: "pointer",
-          "z-index": use(state.window_order).map((order) =>
-            (order.indexOf(this.window) + 1).toString(),
-          ),
+          position: 'absolute',
+          left: windowData.x - BORDER_BASE,
+          top: windowData.y - BORDER_WIDTH - BORDER_BASE,
+          width: windowData.width + BORDER_BASE * 2,
+          height: windowData.height + BORDER_WIDTH + BORDER_BASE - 1,
+          zIndex
         }}
-        class="window"
+        className="window"
+        onMouseDown={(e: React.MouseEvent) => {
+          if ((e.target as HTMLElement).id === 'window-base') {
+            onFocus(windowId);
+          }
+        }}
       >
         <div
-          class={use(this.mousedown).map((m) =>
-            m ? "title-bar title-bar-active" : "title-bar",
-          )}
+          className={state.mousedown ? "title-bar title-bar-active" : "title-bar"}
           id="title-bar"
-          on:mousedown={(e: MouseEvent) => {
-            if ((e.target as HTMLElement).id !== "title-bar") {
-              return;
-            }
-
-            this.mousedown = true;
-            this.offset_x = this.x - e.clientX;
-            this.offset_y = this.y - e.clientY;
-            this.mouse_x = e.clientX;
-            this.mouse_y = e.clientY;
-
-            if (state.window_order.includes(this.window)) {
-              state.window_order.splice(
-                state.window_order.indexOf(this.window),
-                1,
-              );
-            }
-            state.window_order.push(this.window);
-            state.window_order = state.window_order;
-          }}
+          onMouseDown={handleTitleBarMouseDown}
         >
-          <div class="title-bar-text" id="title-bar">
-            {use(this.icon).map((icon) => {
-              if (!icon) {
-                return "";
-              }
-              return (
-                <img
-                  width={BORDER_WIDTH - 8}
-                  height={BORDER_WIDTH - 8}
-                  src={icon}
-                  style={{ "margin-right": "10px" }}
-                />
-              );
-            })}
-            {use(this.name)}
+          <div className="title-bar-text" id="title-bar">
+            {windowData.image && (
+              <img
+                width={BORDER_WIDTH - 8}
+                height={BORDER_WIDTH - 8}
+                src={windowData.image}
+                style={{ marginRight: '10px' }}
+                alt=""
+              />
+            )}
+            {windowData.name}
           </div>
-          <div class="title-bar-controls">
-            <button
-              aria-label="Maximize"
-              on:mousedown={() => {
-                this.fullscreen = true;
-                this.old_x = this.x;
-                this.old_y = this.y;
-                this.old_width = this.width;
-                this.old_height = this.height;
-
-                message_queue.push({
-                  t: "window_map",
-                  x: BORDER_BASE,
-                  y: BORDER_WIDTH + BORDER_BASE,
-                  window: state.windows[this.window].window,
-                  width: window.screen.width + -BORDER_BASE * 2,
-                  height:
-                    window.screen.height - BORDER_WIDTH + -BORDER_BASE * 2,
-                } as WindowMapRequest);
-
-                state.windows[this.window].x = BORDER_BASE;
-                state.windows[this.window].y = BORDER_WIDTH + BORDER_BASE;
-                state.windows[this.window].width =
-                  window.screen.width + -BORDER_BASE * 2;
-                state.windows[this.window].height =
-                  window.screen.height - BORDER_WIDTH + -BORDER_BASE * 2;
-                state.windows = state.windows;
-              }}
-            ></button>
-            <button
-              aria-label="Close"
-              on:mousedown={() => {
-                message_queue.push({
-                  t: "window_close",
-                  window: this.window,
-                } as WindowCloseRequest);
-
-                state.windows[this.window].visible = false;
-              }}
-            ></button>
+          <div className="title-bar-controls">
+            <button aria-label="Maximize" onMouseDown={handleMaximize}></button>
+            <button aria-label="Close" onMouseDown={() => onClose(windowId)}></button>
           </div>
         </div>
       </div>
+
       <div
-        class="window_handles"
         style={{
-          position: "absolute",
-          left: use(this.x).map((x) => x - BORDER_BASE + "px"),
-          top: use(this.y).map((y) => y + -BORDER_WIDTH + -BORDER_BASE + "px"),
-          width: use(this.width).map((w) => w + BORDER_BASE * 2 + "px"),
-          height: use(this.height).map(
-            (h) => h + BORDER_WIDTH + BORDER_BASE * 2 + "px",
-          ),
-          display: use(this.visible).map((v) => (v ? "grid" : "none")),
-          "z-index": use(state.window_order).map((order) =>
-            (order.indexOf(this.window) + 1).toString(),
-          ),
-          "pointer-events": "none",
+          position: 'absolute',
+          left: windowData.x - BORDER_BASE,
+          top: windowData.y - BORDER_WIDTH - BORDER_BASE,
+          width: windowData.width + BORDER_BASE * 2,
+          height: windowData.height + BORDER_WIDTH + BORDER_BASE * 2,
+          display: 'grid',
+          gridTemplateColumns: `${BORDER_BASE}px 1fr ${BORDER_BASE}px`,
+          gridTemplateRows: `${BORDER_BASE}px 1fr ${BORDER_BASE}px`,
+          zIndex,
+          pointerEvents: 'none'
         }}
       >
-        <div
-          style={{
-            "pointer-events": "auto",
-            cursor: "nwse-resize",
-          }}
-          on:mousedown={(e: MouseEvent) => {
-            this.nw_resize = true;
-            this.mouse_x = e.clientX;
-            this.mouse_y = e.clientY;
-
-            this.old_x = this.x;
-            this.old_y = this.y;
-            this.old_width = this.width;
-            this.old_height = this.height;
-          }}
-        ></div>
-        <div
-          style={{
-            "pointer-events": "auto",
-            cursor: "ns-resize",
-          }}
-          on:mousedown={(e: MouseEvent) => {
-            this.n_resize = true;
-            this.mouse_x = e.clientX;
-            this.mouse_y = e.clientY;
-
-            this.old_x = this.x;
-            this.old_y = this.y;
-            this.old_width = this.width;
-            this.old_height = this.height;
-          }}
-        ></div>
-        <div
-          style={{
-            "pointer-events": "auto",
-            cursor: "nesw-resize",
-          }}
-          on:mousedown={(e: MouseEvent) => {
-            this.ne_resize = true;
-            this.mouse_x = e.clientX;
-            this.mouse_y = e.clientY;
-
-            this.old_x = this.x;
-            this.old_y = this.y;
-            this.old_width = this.width;
-            this.old_height = this.height;
-          }}
-        ></div>
-
-        <div
-          style={{
-            "pointer-events": "auto",
-            cursor: "ew-resize",
-          }}
-          on:mousedown={(e: MouseEvent) => {
-            this.w_resize = true;
-            this.mouse_x = e.clientX;
-            this.mouse_y = e.clientY;
-
-            this.old_x = this.x;
-            this.old_y = this.y;
-            this.old_width = this.width;
-            this.old_height = this.height;
-          }}
-        ></div>
-        <div
-          style={{
-            "background-color": "transparent",
-            "pointer-events": "none",
-          }}
-        ></div>
-        <div
-          style={{
-            "pointer-events": "auto",
-            cursor: "ew-resize",
-          }}
-          on:mousedown={(e: MouseEvent) => {
-            this.e_resize = true;
-            this.mouse_x = e.clientX;
-            this.mouse_y = e.clientY;
-
-            this.old_x = this.x;
-            this.old_y = this.y;
-            this.old_width = this.width;
-            this.old_height = this.height;
-          }}
-        ></div>
-
-        <div
-          style={{
-            "pointer-events": "auto",
-            cursor: "nesw-resize",
-          }}
-          on:mousedown={(e: MouseEvent) => {
-            this.sw_resize = true;
-            this.mouse_x = e.clientX;
-            this.mouse_y = e.clientY;
-
-            this.old_x = this.x;
-            this.old_y = this.y;
-            this.old_width = this.width;
-            this.old_height = this.height;
-          }}
-        ></div>
-        <div
-          style={{
-            "pointer-events": "auto",
-            cursor: "ns-resize",
-          }}
-          on:mousedown={(e: MouseEvent) => {
-            this.s_resize = true;
-            this.mouse_x = e.clientX;
-            this.mouse_y = e.clientY;
-
-            this.old_x = this.x;
-            this.old_y = this.y;
-            this.old_width = this.width;
-            this.old_height = this.height;
-          }}
-        ></div>
-        <div
-          style={{
-            "pointer-events": "auto",
-            cursor: "nwse-resize",
-          }}
-          on:mousedown={(e: MouseEvent) => {
-            this.se_resize = true;
-            this.mouse_x = e.clientX;
-            this.mouse_y = e.clientY;
-
-            this.old_x = this.x;
-            this.old_y = this.y;
-            this.old_width = this.width;
-            this.old_height = this.height;
-          }}
-        ></div>
+        <div style={{ pointerEvents: 'auto', cursor: 'nwse-resize' }} onMouseDown={startResize('nw')}></div>
+        <div style={{ pointerEvents: 'auto', cursor: 'ns-resize' }} onMouseDown={startResize('n')}></div>
+        <div style={{ pointerEvents: 'auto', cursor: 'nesw-resize' }} onMouseDown={startResize('ne')}></div>
+        <div style={{ pointerEvents: 'auto', cursor: 'ew-resize' }} onMouseDown={startResize('w')}></div>
+        <div style={{ backgroundColor: 'transparent', pointerEvents: 'none' }}></div>
+        <div style={{ pointerEvents: 'auto', cursor: 'ew-resize' }} onMouseDown={startResize('e')}></div>
+        <div style={{ pointerEvents: 'auto', cursor: 'nesw-resize' }} onMouseDown={startResize('sw')}></div>
+        <div style={{ pointerEvents: 'auto', cursor: 'ns-resize' }} onMouseDown={startResize('s')}></div>
+        <div style={{ pointerEvents: 'auto', cursor: 'nwse-resize' }} onMouseDown={startResize('se')}></div>
       </div>
-    </div>
+    </>
   );
 };
 
-WindowFrame.style = css`
-  .window_handles {
-    grid-template-columns: ${BORDER_BASE.toString()}px 1fr ${BORDER_BASE.toString()}px;
-    grid-template-rows: ${BORDER_BASE.toString()}px 1fr ${BORDER_BASE.toString()}px;
-  }
-`;
+export default function App() {
+  const [windows, setWindows] = useState<Record<string, WindowData>>({});
+  const [windowOrder, setWindowOrder] = useState<string[]>([]);
+  const [showLauncher, setShowLauncher] = useState(false);
+  const [programInput, setProgramInput] = useState('');
+  const messageQueueRef = useRef<any[]>([{ t: 'browser_start' }]);
+  const launcherInputRef = useRef<HTMLInputElement>(null);
 
-let state: Stateful<{
-  windows: Record<string, WindowData>;
-  window_order: string[];
-  window_frames: Record<string, HTMLElement>;
-  elapsed: DOMHighResTimeStamp;
-}> = createState({
-  windows: {},
-  window_order: [],
-  window_frames: {},
-  elapsed: 0,
-});
-let message_queue: WindowDataSegment[] = [{ t: "browser_start" }];
-let message_back_buffer: WindowDataSegment[] = [];
+  useEffect(() => {
+    const step = () => {
+      const messageQueue = messageQueueRef.current;
+      messageQueueRef.current = [];
 
-use(state.window_order).listen((val) => {
-  message_queue.push({
-    t: "window_reorder",
-    windows: val,
-  } as WindowReorderRequest);
-});
+      const cefQuery = (window as any).cefQuery || mockCefQuery;
+      
+      cefQuery({
+        request: JSON.stringify(messageQueue),
+        onSuccess: (response: string) => {
+          if (response !== '[]') {
+            const responseParsed = JSON.parse(response);
+            
+            responseParsed.forEach((segment: any) => {
+              if (segment.t === 'window_focus') {
+                // Handle window focus reply from backend
+                const windowId = segment.window;
+                setWindowOrder(prev => {
+                  const filtered = prev.filter(id => id !== windowId);
+                  return [...filtered, windowId];
+                });
+              } else if (segment.t === 'window_icon') {
+                // Handle window icon update
+                const windowId = segment.window;
+                const image = segment.image;
+                setWindows(prev => ({
+                  ...prev,
+                  [windowId]: {
+                    ...prev[windowId],
+                    image
+                  }
+                }));
+              } else if (segment.t === 'reload') {
+                // Handle reload request
+                window.location.reload();
+              } else if (segment.t === 'window_map') {
+                const reply = segment as WindowMapReply;
+                
+                if (reply.win_t === 'WINDOW_TYPE_NORMAL') {
+                  setWindows(prev => {
+                    const existing = prev[reply.window];
+                    
+                    if (!existing) {
+                      let x = reply.x;
+                      let y = reply.y;
+                      
+                      if (x === 0 && y === 0 && reply.visible) {
+                        x = 100;
+                        y = 100;
+                        messageQueueRef.current.push({
+                          t: 'window_map',
+                          x: 100,
+                          y: 100,
+                          window: reply.window,
+                          width: 500,
+                          height: 500
+                        });
+                      }
+                      
+                      return {
+                        ...prev,
+                        [reply.window]: {
+                          window: reply.window,
+                          name: reply.name,
+                          visible: reply.visible,
+                          x,
+                          y,
+                          width: reply.width,
+                          height: reply.height,
+                          image: null
+                        }
+                      };
+                    }
+                    
+                    return prev;
+                  });
+                  
+                  setWindowOrder(prev => {
+                    if (!prev.includes(reply.window)) {
+                      return [...prev, reply.window];
+                    }
+                    return prev;
+                  });
 
-let start: DOMHighResTimeStamp;
-function step(timestamp: DOMHighResTimeStamp) {
-  if (start === undefined) {
-    start = timestamp;
-  }
-  state.elapsed = timestamp - start;
-
-  message_back_buffer = message_queue;
-  message_queue = [];
-
-  window.cefQuery({
-    request: JSON.stringify(message_back_buffer),
-    onSuccess: (response: string) => {
-      message_back_buffer = [];
-      if (response != "[]") console.log(response, state.elapsed);
-
-      const response_parsed = JSON.parse(response) as WindowDataSegment[];
-      for (let segment in response_parsed) {
-        if (response_parsed[segment]["t"] == "window_focus") {
-          let window_focus_reply = response_parsed[segment] as WindowFocusReply;
-
-          if (state.window_order.includes(window_focus_reply.window)) {
-            state.window_order.splice(
-              state.window_order.indexOf(window_focus_reply.window),
-              1,
-            );
-          }
-          state.window_order.push(window_focus_reply.window);
-          state.window_order = state.window_order;
-        } else if (response_parsed[segment]["t"] == "window_close") {
-          // TODO: causes bugs! properly destroy elements some other way!
-          // let window_close_reply = response_parsed[segment] as WindowCloseReply;
-          //
-          // if (state.window_order.includes(window_close_reply.window)) {
-          //   state.window_order.splice(
-          //     state.window_order.indexOf(window_close_reply.window),
-          //     1,
-          //   );
-          // }
-          //
-          // if (state.windows[window_close_reply.window]) {
-          //   delete state.windows[window_close_reply.window];
-          // }
-          // if (state.window_frames[window_close_reply.window]) {
-          //   delete state.window_frames[window_close_reply.window];
-          // }
-        } else if (response_parsed[segment]["t"] == "mouse_move") {
-          let mouse_move_reply = response_parsed[segment] as MouseMoveReply;
-          let event = new MouseEvent("mousemove", {
-            clientX: mouse_move_reply.x,
-            clientY: mouse_move_reply.y,
-            view: window,
-          });
-          document.dispatchEvent(event);
-        } else if (response_parsed[segment]["t"] == "reload") {
-          window.location.reload();
-        } else if (response_parsed[segment]["t"] == "mouse_press") {
-          let mouse_move_reply = response_parsed[segment] as MousePressReply;
-          let event = new MouseEvent("mousepress", {
-            clientX: mouse_move_reply.x,
-            clientY: mouse_move_reply.y,
-            view: window,
-          });
-          document.dispatchEvent(event);
-        } else if (response_parsed[segment]["t"] == "window_icon") {
-          let window_icon_reply = response_parsed[segment] as WindowIconReply;
-
-          state.windows[window_icon_reply.window].image =
-            window_icon_reply.image;
-        } else if (response_parsed[segment]["t"] == "window_map") {
-          let window_map_reply = response_parsed[segment] as WindowMapReply;
-
-          if (window_map_reply.win_t == "WINDOW_TYPE_NORMAL") {
-            if (!state.windows[window_map_reply.window]) {
-              if (
-                !state.windows[window_map_reply.window] &&
-                window_map_reply.x == 0 &&
-                window_map_reply.y == 0 &&
-                window_map_reply.visible
-              ) {
-                message_queue.push({
-                  t: "window_map",
-                  x: 100,
-                  y: 100,
-                  window: window_map_reply.window,
-                  width: 500,
-                  height: 500,
-                } as WindowMapRequest);
-                window_map_reply.x = 100;
-                window_map_reply.y = 100;
+                  if (!reply.has_border) {
+                    messageQueueRef.current.push({
+                      t: 'window_register_border',
+                      window: reply.window,
+                      x: -BORDER_BASE,
+                      y: -BORDER_WIDTH - BORDER_BASE,
+                      width: BORDER_BASE,
+                      height: BORDER_BASE
+                    });
+                  }
+                }
               }
-
-              state.windows[window_map_reply.window] = {
-                window: window_map_reply.window,
-                name: window_map_reply.name,
-                visible: window_map_reply.visible,
-                x: window_map_reply.x,
-                y: window_map_reply.y,
-                width: window_map_reply.width,
-                height: window_map_reply.height,
-                image: null,
-              };
-            } else if (state.windows[window_map_reply.window]) {
-              state.windows[window_map_reply.window] = {
-                window: window_map_reply.window,
-                visible: window_map_reply.visible,
-                name: window_map_reply.name,
-                x: state.windows[window_map_reply.window].x,
-                y: state.windows[window_map_reply.window].y,
-                width: state.windows[window_map_reply.window].width,
-                height: state.windows[window_map_reply.window].height,
-                image: state.windows[window_map_reply.window].image,
-              };
-
-              if (
-                state.windows[window_map_reply.window].x !=
-                  window_map_reply.x ||
-                state.windows[window_map_reply.window].y != window_map_reply.y
-              ) {
-                message_queue.push({
-                  t: "window_map",
-                  x: state.windows[window_map_reply.window].x,
-                  y: state.windows[window_map_reply.window].y,
-                  window: state.windows[window_map_reply.window].window,
-                  width: state.windows[window_map_reply.window].width,
-                  height: state.windows[window_map_reply.window].height,
-                } as WindowMapRequest);
-              }
-            }
-
-            state.windows = state.windows;
-
-            if (!state.window_order.includes(window_map_reply.window)) {
-              state.window_order.push(window_map_reply.window);
-              state.window_order = state.window_order;
-            }
-
-            if (!window_map_reply.has_border) {
-              message_queue.push({
-                t: "window_register_border",
-                window: window_map_reply.window,
-                x: -BORDER_BASE,
-                y: -BORDER_WIDTH + -BORDER_BASE,
-                width: BORDER_BASE,
-                height: BORDER_BASE,
-              } as WindowRegisterBorderRequest);
-            }
-
-            if (!state.window_frames[window_map_reply.window]) {
-              state.window_frames[window_map_reply.window] = (
-                <WindowFrame
-                  name={use(state.windows).map(
-                    () => state.windows[window_map_reply.window].name,
-                  )}
-                  x={use(state.windows).map(
-                    () => state.windows[window_map_reply.window].x,
-                  )}
-                  y={use(state.windows).map(
-                    () => state.windows[window_map_reply.window].y,
-                  )}
-                  width={use(state.windows).map(
-                    () => state.windows[window_map_reply.window].width,
-                  )}
-                  height={use(state.windows).map(
-                    () => state.windows[window_map_reply.window].height,
-                  )}
-                  visible={use(state.windows).map(() => {
-                    return state.windows[window_map_reply.window].visible;
-                  })}
-                  icon={use(state.windows).map(
-                    () => state.windows[window_map_reply.window].image,
-                  )}
-                  window={window_map_reply.window}
-                />
-              );
-            }
-
-            state.window_frames = state.window_frames;
+            });
           }
+        },
+        onFailure: () => {
+          messageQueueRef.current = [];
         }
-      }
-    },
-    onFailure: function (_error_code: number, _error_message: string) {
-      message_queue = [];
-    },
-  });
+      });
 
-  requestAnimationFrame(step);
-}
+      requestAnimationFrame(step);
+    };
 
-requestAnimationFrame(step);
+    requestAnimationFrame(step);
+  }, []);
 
-let App: Component<
-  {},
-  {
-    counter: number;
-    x: number;
-    y: number;
-    showLauncher: boolean;
-    programInput: string;
-  }
-> = function (ctx) {
-  this.counter = 0;
-  this.x = 0;
-  this.y = 0;
-  this.showLauncher = false;
-  this.programInput = "";
+  useEffect(() => {
+    if (showLauncher) {
+      setTimeout(() => launcherInputRef.current?.focus(), 100);
+    }
+  }, [showLauncher]);
 
-  ctx.mount = () => {
-    document.addEventListener("mousemove", (e) => {
-      this.x = e.screenX;
-      this.y = e.screenY;
+  useEffect(() => {
+    messageQueueRef.current.push({
+      t: 'window_reorder',
+      windows: windowOrder
     });
-  };
+  }, [windowOrder]);
+
+  const handleFocus = useCallback((windowId: string) => {
+    setWindowOrder(prev => {
+      const filtered = prev.filter(id => id !== windowId);
+      return [...filtered, windowId];
+    });
+    
+    messageQueueRef.current.push({
+      t: 'window_focus',
+      window: windowId
+    });
+  }, []);
+
+  const handleClose = useCallback((windowId: string) => {
+    messageQueueRef.current.push({
+      t: 'window_close',
+      window: windowId
+    });
+    
+    setWindows(prev => ({
+      ...prev,
+      [windowId]: { ...prev[windowId], visible: false }
+    }));
+  }, []);
+
+  const handleMove = useCallback((windowId: string, x: number, y: number) => {
+    setWindows(prev => ({
+      ...prev,
+      [windowId]: { ...prev[windowId], x, y }
+    }));
+    
+    messageQueueRef.current.push({
+      t: 'window_map',
+      x,
+      y,
+      window: windowId,
+      width: windows[windowId]?.width || 0,
+      height: windows[windowId]?.height || 0
+    });
+  }, [windows]);
+
+  const handleResize = useCallback((windowId: string, width: number, height: number) => {
+    setWindows(prev => ({
+      ...prev,
+      [windowId]: { ...prev[windowId], width, height }
+    }));
+    
+    messageQueueRef.current.push({
+      t: 'window_map',
+      x: windows[windowId]?.x || 0,
+      y: windows[windowId]?.y || 0,
+      window: windowId,
+      width,
+      height
+    });
+  }, [windows]);
 
   const runProgram = () => {
-    if (this.programInput.trim()) {
-      message_queue.push({
-        t: "run_program",
-        command: this.programInput.trim().split(" "),
-      } as RunProgramRequest);
-      this.programInput = "";
-      this.showLauncher = false;
+    if (programInput.trim()) {
+      messageQueueRef.current.push({
+        t: 'run_program',
+        command: programInput.trim().split(' ')
+      });
+      setProgramInput('');
+      setShowLauncher(false);
     }
   };
 
   return (
-    <div style={{ width: "100%", height: "100%" }}>
+    <div style={{ width: '100%', height: '100%' }}>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xp.css/0.3.2/xp.min.css" />
+      
       <div
-        on:mousedown={() => {
-          this.showLauncher = !this.showLauncher;
-          if (this.showLauncher) {
-            setTimeout(() => {
-            document.getElementById("launcher-textbox")?.focus();
-            }, 100)
-          }
-        }}
-        style={{ width: "100%", height: "100%" }}
-      ></div>
+        onMouseDown={() => setShowLauncher(!showLauncher)}
+        style={{ width: '100%', height: '100%' }}
+      />
 
-      <div
-        style={{
-          position: "fixed",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          padding: "20px",
-          display: use(this.showLauncher).map((show) => {
-            return show ? "block" : "none";
-          }),
-        }}
-        class="window window-body"
-        on:mousedown={(e: MouseEvent) => {
-          e.stopPropagation();
-        }}
-      >
-        <div style={{ "margin-bottom": "10px", "font-weight": "bold" }}>
-          Run Program
-        </div>
-        <input
-          type="text"
-          id="launcher-textbox"
-          value={use(this.programInput)}
-          autocomplete="off"
-          on:input={(e: Event) => {
-            this.programInput = (e.target as HTMLInputElement).value;
-          }}
-          on:keydown={(e: KeyboardEvent) => {
-            if (e.key === "Enter") {
-              runProgram();
-            } else if (e.key === "Escape") {
-              this.showLauncher = false;
-              this.programInput = "";
-            }
-          }}
-          placeholder="Enter program name..."
-          style={{
-            width: "300px",
-            "margin-bottom": "10px",
-          }}
-          ref={(el: HTMLInputElement) => {
-            setTimeout(() => el?.focus(), 0);
-          }}
-        />
+      {showLauncher && (
         <div
           style={{
-            display: "flex",
-            gap: "10px",
-            "justify-content": "flex-end",
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            padding: '20px',
           }}
+          className="window"
+          onMouseDown={(e) => e.stopPropagation()}
         >
-          <button
-            on:mousedown={(e: MouseEvent) => {
-              e.stopPropagation();
-              runProgram();
-            }}
-            style={{
-              padding: "5px 15px",
-              cursor: "pointer",
-            }}
-            class="normal"
-          >
-            Run
-          </button>
-          <button
-            on:mousedown={(e: MouseEvent) => {
-              e.stopPropagation();
-              this.showLauncher = false;
-              this.programInput = "";
-            }}
-            style={{
-              padding: "5px 15px",
-              cursor: "pointer",
-            }}
-            class="normal"
-          >
-            Cancel
-          </button>
+          <div className="window-body">
+            <div style={{ marginBottom: '10px', fontWeight: 'bold' }}>
+              Run Program
+            </div>
+            <input
+              ref={launcherInputRef}
+              type="text"
+              value={programInput}
+              autoComplete="off"
+              onChange={(e) => setProgramInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') runProgram();
+                else if (e.key === 'Escape') {
+                  setShowLauncher(false);
+                  setProgramInput('');
+                }
+              }}
+              placeholder="Enter program name..."
+              style={{ width: '300px', marginBottom: '10px' }}
+            />
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={runProgram}>Run</button>
+              <button onClick={() => {
+                setShowLauncher(false);
+                setProgramInput('');
+              }}>Cancel</button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      {use(state.window_frames).map((wins) => {
-        return Object.values(wins);
-      })}
+      {Object.entries(windows).map(([windowId, windowData]) => (
+        <WindowFrame
+          key={windowId}
+          windowId={windowId}
+          windowData={windowData}
+          zIndex={windowOrder.indexOf(windowId) + 1}
+          onFocus={handleFocus}
+          onClose={handleClose}
+          onMove={handleMove}
+          onResize={handleResize}
+        />
+      ))}
     </div>
   );
-};
-App.style = css``;
-
-document.querySelector("#app")?.replaceWith(<App />);
-
-document.oncontextmenu = document.body.oncontextmenu = function () {
-  return false;
-};
+}
